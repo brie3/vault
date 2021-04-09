@@ -9,5 +9,60 @@ services:
       dockerfile: Dockerfile
     environment:
       - VAULT_TOKEN=secret
-      - VAULT_ADDR=http://vault:8200
+      - VAULT_ADDR=http://app-vault:8200
       - DB_SECRET_PATH=secret/data/db
+    depends_on:
+      - app-db
+      - app-flyway
+      - app-vault
+      - app-vault-cli
+    networks:
+      - app
+  
+  app-db:
+    image: postgres:13.1
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER=db_user
+      - POSTGRES_PASSWORD=user_pwd
+    healthcheck:
+      test: PGPASSWORD='user_pwd' psql -U db_user --command='SELECT 1'
+      interval: 1s
+      timeout: 2s
+      retries: 5
+    networks:
+      - app
+
+  app-flyway:
+    image: boxfuse/flyway
+    command: -url=jdbc:postgresql://app-db:5432/app -user=db_user -password=user_pwd migrate
+    volumes:
+      - ./db/migration:/flyway/sql
+    depends_on:
+      - app-db
+    networks:
+      - app
+
+  app-vault:
+    image: vault:1.6.1
+    ports:
+      - 8200:8200
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=secret
+    networks:
+      - app
+
+  app-vault-cli:
+    image: vault:1.6.1
+    environment:
+      - VAULT_TOKEN=secret
+      - VAULT_ADDR=http://app-vault:8200
+    entrypoint: vault
+    command: kv put secret/db db_url="postgres://db_user:db_pwd@app-db:5432/app?sslmde=disable"
+    depends_on:
+      - app-vault
+    networks:
+      - app
