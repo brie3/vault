@@ -1,0 +1,13 @@
+version: "3"
+networks:
+  app:
+
+services:
+  app:
+    build:
+      context: ./cmd
+      dockerfile: Dockerfile
+    environment:
+      - VAULT_TOKEN=secret
+      - VAULT_ADDR=http://vault:8200
+      - DB_SECRET_PATH=secret/data/db
